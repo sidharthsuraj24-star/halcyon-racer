@@ -438,7 +438,8 @@ export function step(dt: number, ctx: StepCtx) {
     sim.boostCharge = 0;
     sim.banner = "NITRO";
     sim.bannerT = 1.2;
-    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(40);
+    sim.shake = Math.max(sim.shake, 0.55);
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([30, 20, 40]);
   }
   if (sim.boostActive) {
     sim.boostT -= dt;
@@ -769,6 +770,20 @@ export function step(dt: number, ctx: StepCtx) {
 export function hudSnapshot() {
   const s = runtime.sim;
   const sp = Math.abs(s.speed);
+  let ghostDelta = 0;
+  const ghost = runtime.ghost;
+  if (ghost.length > 8 && !s.finished) {
+    let bestD2 = 1e9;
+    let bestT = 0;
+    const px = s.x, pz = s.z;
+    for (let i = 0; i < ghost.length; i += 2) {
+      const g = ghost[i];
+      const dx = g.x - px, dz = g.z - pz;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < bestD2) { bestD2 = d2; bestT = g.t; }
+    }
+    if (bestD2 < 220) ghostDelta = s.raceTime - bestT;
+  }
   return {
     speed: Math.round(sp * 3.6),
     gear: s.gear,
@@ -791,6 +806,7 @@ export function hudSnapshot() {
     finished: s.finished,
     newRecord: s.newRecord,
     shake: s.shake,
+    ghostDelta,
   };
 }
 

@@ -185,9 +185,9 @@ function Loop() {
       lookS.lerp(look, 1 - Math.exp(-7 * dt));
     }
     cam.lookAt(lookS);
-    const boost = sim.boostActive && phase === "race" ? 10 : 0;
+    const boost = sim.boostActive && phase === "race" ? 18 : 0;
     const base = mode === "fpp" ? 84 : mode === "hood" ? 76 : 56;
-    const speedFov = Math.min(1, Math.abs(sim.speed) / 55) * 12;
+    const speedFov = Math.min(1, Math.abs(sim.speed) / 55) * 14;
     const target = base + speedFov + boost;
     cam.fov += (target - cam.fov) * (1 - Math.exp(-5 * dt));
     const roll = mode === "chase" ? -sim.lat * 0.018 - sim.roll * 0.4 : 0;
@@ -221,8 +221,11 @@ function Dust() {
     const arr = pos.array as Float32Array;
     const carr = col.array as Float32Array;
     const sim = runtime.sim;
-    if ((sim.drifting || sim.off || sim.boostT > 0) && useGame.getState().phase === "race") {
-      for (let n = 0; n < 2; n++) {
+    const lowGrip = (sim.grip ?? 1) < 0.55;
+    const hardDrift = sim.drifting && sim.drift > 0.4;
+    if ((sim.drifting || sim.off || sim.boostT > 0 || lowGrip) && useGame.getState().phase === "race") {
+      const count = hardDrift || lowGrip || sim.boostT > 0 ? 3 : 2;
+      for (let n = 0; n < count; n++) {
         let slot = -1;
         for (let k = 0; k < 80; k++) if (life.current[k] <= 0) { slot = k; break; }
         if (slot < 0) break;

@@ -530,6 +530,14 @@ function Hud(props: {
           <span className="text-mute">BEST</span>
           <span className="font-mono text-gold">{formatTime(hud.bestLap)}</span>
         </div>
+        {hud.ghostDelta !== undefined && Math.abs(hud.ghostDelta) > 0.05 && (
+          <div className="flex gap-4">
+            <span className="text-mute">DELTA</span>
+            <span className={`font-mono ${hud.ghostDelta < 0 ? "text-gold" : "text-ember"}`}>
+              {hud.ghostDelta < 0 ? "-" : "+"}{Math.abs(hud.ghostDelta).toFixed(2)}
+            </span>
+          </div>
+        )}
         {hud.wrong && <div className="text-ember">WRONG WAY</div>}
       </div>
 
