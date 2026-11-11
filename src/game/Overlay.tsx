@@ -138,10 +138,10 @@ export function Overlay() {
         </div>
       )}
 
-      {(phase === "race" || phase === "paused") && save.races < 2 && (
+      {(phase === "race") && save.races < 2 && (
         <TutorialHint />
       )}
-      {(phase === "race" || phase === "paused") && <TouchControls />}
+      {phase === "race" && <TouchControls />}
     </div>
   );
 }
@@ -531,12 +531,20 @@ function Hud(props: {
         <div className="text-right">
           <div className="font-display text-4xl leading-none md:text-5xl">{hud.speed}</div>
           <div className="text-xs uppercase tracking-widest text-mute">km/h · G{hud.gear}</div>
-          <button
-            onClick={cycleCamera}
-            className="pointer-events-auto mt-2 rounded-full border border-line bg-panel/70 px-2.5 py-0.5 text-[10px] uppercase tracking-widest text-gold backdrop-blur"
-          >
-            {camLabel}
-          </button>
+          <div className="mt-2 flex justify-end gap-1.5">
+            <button
+              onClick={cycleCamera}
+              className="pointer-events-auto rounded-full border border-line bg-panel/70 px-2.5 py-0.5 text-[10px] uppercase tracking-widest text-gold backdrop-blur"
+            >
+              {camLabel}
+            </button>
+            <button
+              onClick={() => { runtime.pauseEdge = true; }}
+              className="pointer-events-auto rounded-full border border-line bg-panel/70 px-2.5 py-0.5 text-[10px] uppercase tracking-widest text-ivory backdrop-blur"
+            >
+              Pause
+            </button>
+          </div>
         </div>
       </div>
 
@@ -791,6 +799,12 @@ function TouchControls() {
         <button onPointerDown={() => press("missile", true)} onPointerUp={() => press("missile", false)} onPointerLeave={() => press("missile", false)} onPointerCancel={() => press("missile", false)} className="h-12 w-12 rounded-full border border-ember bg-ember/30 text-[10px] uppercase leading-tight text-ember">Msl<span className="block text-[9px]">{hud.missile ?? 0}</span></button>
         <button onPointerDown={() => press("shield", true)} onPointerUp={() => press("shield", false)} onPointerLeave={() => press("shield", false)} onPointerCancel={() => press("shield", false)} className="h-12 w-12 rounded-full border border-gold bg-gold/20 text-[10px] uppercase leading-tight text-gold">Shld<span className="block text-[9px]">{hud.shieldAmmo ?? 0}</span></button>
         <button onPointerDown={() => press("emp", true)} onPointerUp={() => press("emp", false)} onPointerLeave={() => press("emp", false)} onPointerCancel={() => press("emp", false)} className="h-12 w-12 rounded-full border border-line bg-panel/80 text-[10px] uppercase leading-tight text-mute">EMP<span className="block text-[9px] text-ivory">{hud.emp ?? 0}</span></button>
+        <button
+          onClick={() => { runtime.respawnEdge = true; }}
+          className="h-12 w-12 rounded-full border border-line bg-panel/80 text-[10px] uppercase leading-tight text-ivory"
+        >
+          Reset
+        </button>
       </div>
       <div className="flex items-end justify-between w-full">
       <div
