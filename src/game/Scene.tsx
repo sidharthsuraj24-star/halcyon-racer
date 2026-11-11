@@ -4,7 +4,7 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { Stars } from "@react-three/drei";
 import { Bloom, EffectComposer, Vignette } from "@react-three/postprocessing";
 import { carById } from "@/game/cars";
-import { poses, respawn, runtime, step, type StepCtx } from "@/game/runtime";
+import { hazards, poses, respawn, runtime, step, type StepCtx } from "@/game/runtime";
 import { getTrack, sampleAt } from "@/game/tracks";
 import { useGame } from "@/game/store";
 import { Traffic } from "@/game/Cars";
@@ -205,6 +205,66 @@ function Loop() {
     state.gl.toneMappingExposure = exposure * (st.weather === "rain" ? 0.82 : 1);
   });
   return null;
+}
+
+function Hazards() {
+  const oils = useRef<(THREE.Mesh | null)[]>([]);
+  const missiles = useRef<(THREE.Mesh | null)[]>([]);
+  useFrame(() => {
+    let oi = 0;
+    let mi = 0;
+    for (const h of hazards) {
+      if (h.type === "oil" && oi < 8) {
+        const m = oils.current[oi++];
+        if (!m) continue;
+        m.visible = true;
+        m.position.set(h.x, 0.05, h.z);
+      } else if (h.type === "missile" && mi < 4) {
+        const m = missiles.current[mi++];
+        if (!m) continue;
+        m.visible = true;
+        m.position.set(h.x, 0.7, h.z);
+        m.lookAt(h.x + h.vx, 0.7, h.z + h.vz);
+      }
+    }
+    for (; oi < 8; oi++) {
+      const m = oils.current[oi];
+      if (m) m.visible = false;
+    }
+    for (; mi < 4; mi++) {
+      const m = missiles.current[mi];
+      if (m) m.visible = false;
+    }
+  });
+  return (
+    <group>
+      {Array.from({ length: 8 }, (_, i) => (
+        <mesh
+          key={`oil-${i}`}
+          ref={(n) => {
+            oils.current[i] = n;
+          }}
+          rotation={[-Math.PI / 2, 0, 0]}
+          visible={false}
+        >
+          <circleGeometry args={[1.7, 18]} />
+          <meshBasicMaterial color="#140e0a" transparent opacity={0.82} depthWrite={false} />
+        </mesh>
+      ))}
+      {Array.from({ length: 4 }, (_, i) => (
+        <mesh
+          key={`msl-${i}`}
+          ref={(n) => {
+            missiles.current[i] = n;
+          }}
+          visible={false}
+        >
+          <sphereGeometry args={[0.22, 10, 8]} />
+          <meshBasicMaterial color="#ff5a2a" toneMapped={false} />
+        </mesh>
+      ))}
+    </group>
+  );
 }
 
 function Dust() {
@@ -478,6 +538,7 @@ function Stage() {
       <Traffic />
       <Dust />
       <Sparks />
+      <Hazards />
       <SpeedLines />
       <TireMarks />
       {weather === "rain" ? <Rain /> : null}

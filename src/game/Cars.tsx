@@ -37,6 +37,7 @@ function CarView({ spec, index, plate, player, ghost }: { spec: CarSpec; index: 
   const spins = useRef<Array<THREE.Object3D | null>>([]);
   const body = useRef<THREE.Group>(null);
   const driver = useRef<THREE.Group>(null);
+  const shieldMesh = useRef<THREE.Mesh>(null);
   const wheel = useRef<THREE.Group>(null);
   const spotL = useRef<THREE.SpotLight>(null);
   const spotR = useRef<THREE.SpotLight>(null);
@@ -90,6 +91,7 @@ function CarView({ spec, index, plate, player, ghost }: { spec: CarSpec; index: 
       const inten = (night ? 11 : 1.4) * (dmg > 0.5 ? 0.25 : 1);
       if (spotL.current) spotL.current.intensity = inten;
       if (spotR.current) spotR.current.intensity = inten;
+      if (shieldMesh.current) shieldMesh.current.visible = runtime.sim.shield > 0;
     }
   });
 
@@ -115,6 +117,12 @@ function CarView({ spec, index, plate, player, ghost }: { spec: CarSpec; index: 
 
   return (
     <group ref={ref}>
+      {player ? (
+        <mesh ref={shieldMesh} visible={false} position={[0, 0.7, 0]}>
+          <sphereGeometry args={[2.15, 18, 12]} />
+          <meshBasicMaterial color="#8fd4ff" transparent opacity={0.22} depthWrite={false} />
+        </mesh>
+      ) : null}
       <group ref={body}>
         {player ? <PlayerModel /> : null}
         <group visible={!player}>
@@ -282,6 +290,8 @@ export function Traffic() {
 
 function PoliceCar() {
   const ref = useRef<THREE.Group>(null);
+  const red = useRef<THREE.MeshStandardMaterial>(null);
+  const blue = useRef<THREE.MeshStandardMaterial>(null);
   const speed = useRef(0);
   const dist = useRef(16);
   useFrame((_, dt) => {
@@ -290,6 +300,9 @@ function PoliceCar() {
     const sim = runtime.sim;
     const show = sim.heat > 2.2 && !sim.finished;
     g.visible = show;
+    const blink = Math.sin(Date.now() * 0.018) > 0;
+    if (red.current) red.current.emissiveIntensity = blink ? 10 : 0.15;
+    if (blue.current) blue.current.emissiveIntensity = blink ? 0.15 : 10;
     if (!show) { speed.current = 0; dist.current = 16; return; }
     const target = Math.max(20, sim.speed * 0.95 + (sim.off ? 8 : 2));
     speed.current += (target - speed.current) * Math.min(1, dt * 1.8);
@@ -314,11 +327,11 @@ function PoliceCar() {
       </mesh>
       <mesh position={[0.3, 1.15, -0.2]}>
         <boxGeometry args={[0.25, 0.12, 0.4]} />
-        <meshStandardMaterial color="#e23a32" emissive="#e23a32" emissiveIntensity={3} toneMapped={false} />
+        <meshStandardMaterial ref={red} color="#e23a32" emissive="#e23a32" emissiveIntensity={3} toneMapped={false} />
       </mesh>
       <mesh position={[-0.3, 1.15, -0.2]}>
         <boxGeometry args={[0.25, 0.12, 0.4]} />
-        <meshStandardMaterial color="#3a6ae2" emissive="#3a6ae2" emissiveIntensity={3} toneMapped={false} />
+        <meshStandardMaterial ref={blue} color="#3a6ae2" emissive="#3a6ae2" emissiveIntensity={3} toneMapped={false} />
       </mesh>
     </group>
   );

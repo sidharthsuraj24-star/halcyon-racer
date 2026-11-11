@@ -654,10 +654,17 @@ export function step(dt: number, ctx: StepCtx) {
       sim.speed = nvx * fx + nvz * fz;
       sim.lat = nvx * rx + nvz * rz;
       if (outward > 5 && sim.hitCd <= 0) {
-        sim.damage = Math.min(1, sim.damage + 0.08);
-        sim.shake = Math.min(1, 0.3 + outward * 0.02);
         sim.hitCd = 0.45;
-        audio.bump();
+        if (sim.shield > 0) {
+          sim.shield = 0;
+          sim.shake = Math.max(sim.shake, 0.4);
+          sim.banner = "BLOCK";
+          sim.bannerT = 0.7;
+        } else {
+          sim.damage = Math.min(1, sim.damage + 0.08);
+          sim.shake = Math.min(1, 0.3 + outward * 0.02);
+          audio.bump();
+        }
         if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(25);
       }
     }

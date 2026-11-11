@@ -571,6 +571,9 @@ function Hud(props: {
         {hud.drift > 0.2 && (
           <div className="mt-2 text-right text-xs uppercase tracking-widest text-gold">Drift</div>
         )}
+        {runtime.sim.shield > 0 && (
+          <div className="mt-1 text-right text-[10px] uppercase tracking-widest text-ivory">Shield</div>
+        )}
         <div className="mt-2 hidden text-right text-[10px] uppercase tracking-wider text-mute md:block">
           Q {items.oil ?? 0} · E {items.missile ?? 0} · F {items.shield ?? 0} · G {items.emp ?? 0}
         </div>
