@@ -149,6 +149,13 @@ function clamp(v: number, a: number, b: number) {
   return Math.max(a, Math.min(b, v));
 }
 
+function wrapDelta(a: number, b: number) {
+  let d = b - a;
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
 function crossed(prev: number, curr: number, gate: number): boolean {
   let d = curr - prev;
   if (d > 0.5) d -= 1;
@@ -351,7 +358,7 @@ export function step(dt: number, ctx: StepCtx) {
   const maxCap = car.maxSpeed * speedBonus * (1 - sim.damage * 0.18 * (1 - armor));
   const drifting = Boolean(drift) && sim.speed > 12 && Math.abs(steer) > 0.12;
   const boostLvl = Math.max(1, Math.min(4, ctx.boostLevel || 1));
-  const mult = [0, 2.2, 2.8, 3.4, 4.0][boostLvl];
+  const mult = [1, 1.22, 1.3, 1.38, 1.48][boostLvl];
 
   // Torque curve: peak mid-RPM, falls off at redline
   const gearRatios = [0, 3.4, 2.2, 1.55, 1.15, 0.88, 0.72];
@@ -455,7 +462,7 @@ export function step(dt: number, ctx: StepCtx) {
   }
   if (sim.boostActive) {
     sim.boostT -= dt;
-    if (sim.speed < maxCap * mult) sim.speed += 80 * dt;
+    if (sim.speed < maxCap * mult) sim.speed += 42 * dt;
     if (sim.boostT <= 0) {
       sim.boostActive = false;
       sim.boostT = 0;
@@ -602,7 +609,22 @@ export function step(dt: number, ctx: StepCtx) {
     }
   }
 
-  sim.hint = nearestIndex(track, sim.x, sim.z, sim.hint);
+  const hinted = nearestIndex(track, sim.x, sim.z, sim.hint);
+  const cand = track.samples[hinted];
+  let useHint = hinted;
+  if (cand) {
+    let du = cand.u - sim.u;
+    if (du > 0.5) du -= 1;
+    if (du < -0.5) du += 1;
+    if (Math.abs(du) > 0.12) {
+      const n = track.samples.length;
+      const prevI = ((Math.round(sim.u * n) % n) + n) % n;
+      const prev = track.samples[prevI];
+      const kd = prev ? (sim.x - prev.x) ** 2 + (sim.z - prev.z) ** 2 : 1e9;
+      if (kd < 2500) useHint = prevI;
+    }
+  }
+  sim.hint = useHint;
   const s = track.samples[sim.hint];
   if (!s) return;
   const latOff = (sim.x - s.x) * s.rx + (sim.z - s.z) * s.rz;
@@ -823,7 +845,7 @@ export function step(dt: number, ctx: StepCtx) {
     ghostPose.x = a.x + (b.x - a.x) * k;
     ghostPose.y = a.y + (b.y - a.y) * k;
     ghostPose.z = a.z + (b.z - a.z) * k;
-    ghostPose.yaw = a.yaw + (b.yaw - a.yaw) * k;
+    ghostPose.yaw = a.yaw + wrapDelta(a.yaw, b.yaw) * k;
     ghostPose.visible = t <= ghost[ghost.length - 1].t;
     ghostPose.speed = 20;
   } else if (runtime.phase !== "replay") {

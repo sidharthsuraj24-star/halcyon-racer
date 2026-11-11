@@ -115,7 +115,7 @@ const CAMS: CamMode[] = ["chase", "fpp", "hood", "tower"];
 
 export const BOOST_WINS: Record<number, number> = { 2: 5, 3: 15, 4: 30 };
 export const BOOST_COST: Record<number, number> = { 2: 200, 3: 500, 4: 900 };
-export const BOOST_MULT: Record<number, number> = { 1: 2.2, 2: 2.8, 3: 3.4, 4: 4.0 };
+export const BOOST_MULT: Record<number, number> = { 1: 1.22, 2: 1.3, 3: 1.38, 4: 1.48 };
 export const BOOST_RECHARGE: Record<number, number> = { 1: 18, 2: 14, 3: 11, 4: 8 };
 
 export type ShopItem = { id: string; name: string; blurb: string; cost: number; max: number; effect: string };
