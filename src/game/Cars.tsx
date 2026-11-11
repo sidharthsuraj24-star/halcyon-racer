@@ -292,9 +292,7 @@ function PoliceCar() {
   const ref = useRef<THREE.Group>(null);
   const red = useRef<THREE.MeshStandardMaterial>(null);
   const blue = useRef<THREE.MeshStandardMaterial>(null);
-  const speed = useRef(0);
-  const dist = useRef(16);
-  useFrame((_, dt) => {
+  useFrame(() => {
     const g = ref.current;
     if (!g) return;
     const sim = runtime.sim;
@@ -303,16 +301,12 @@ function PoliceCar() {
     const blink = Math.sin(Date.now() * 0.018) > 0;
     if (red.current) red.current.emissiveIntensity = blink ? 10 : 0.15;
     if (blue.current) blue.current.emissiveIntensity = blink ? 0.15 : 10;
-    if (!show) { speed.current = 0; dist.current = 16; return; }
-    const target = Math.max(20, sim.speed * 0.95 + (sim.off ? 8 : 2));
-    speed.current += (target - speed.current) * Math.min(1, dt * 1.8);
-    const closing = (speed.current - sim.speed) * 0.15;
-    dist.current = Math.max(2.4, Math.min(20, dist.current - closing * dt));
-    sim.chaseDist = dist.current;
+    if (!show) return;
+    const dist = sim.chaseDist;
     const fx = -Math.sin(sim.yaw);
     const fz = -Math.cos(sim.yaw);
     const bob = Math.sin(Date.now() * 0.012) * 0.04;
-    g.position.set(sim.x - fx * dist.current, sim.y + 0.02 + bob, sim.z - fz * dist.current);
+    g.position.set(sim.x - fx * dist, sim.y + 0.02 + bob, sim.z - fz * dist);
     g.rotation.set(sim.pitch * 0.3, sim.yaw + Math.PI, 0);
   });
   return (

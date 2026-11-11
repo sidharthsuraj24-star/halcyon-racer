@@ -107,7 +107,7 @@ function Loop() {
     let pz = sim.z;
 
     if (phase === "replay") {
-      const g = runtime.ghost;
+      const g = runtime.replayTape.length > 1 ? runtime.replayTape : runtime.ghost;
       if (g.length > 1) {
         runtime.replayT += dt;
         const t = runtime.replayT;

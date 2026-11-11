@@ -355,7 +355,9 @@ export const useGame = create<State>((set, get) => ({
     });
   },
   replay: () => {
-    if (runtime.ghost.length < 2) return;
+    const tape = runtime.recording.length > 2 ? runtime.recording : runtime.ghost;
+    if (tape.length < 2) return;
+    runtime.replayTape = tape.slice();
     runtime.replayT = 0;
     runtime.replayIx = 0;
     runtime.phase = "replay";

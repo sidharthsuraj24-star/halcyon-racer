@@ -752,6 +752,7 @@ function TouchControls() {
     const el = steerRef.current;
     if (!el) return;
 
+    let dragging = false;
     const setSteer = (clientX: number) => {
       const rect = el.getBoundingClientRect();
       const x = (clientX - rect.left) / rect.width;
@@ -759,15 +760,17 @@ function TouchControls() {
     };
 
     const onDown = (e: PointerEvent) => {
+      dragging = true;
       setActive(true);
       el.setPointerCapture(e.pointerId);
       setSteer(e.clientX);
     };
     const onMove = (e: PointerEvent) => {
-      if (!active && e.buttons === 0) return;
+      if (!dragging) return;
       setSteer(e.clientX);
     };
     const onUp = () => {
+      dragging = false;
       setActive(false);
       runtime.touch.steer = 0;
     };
@@ -782,7 +785,7 @@ function TouchControls() {
       el.removeEventListener("pointerup", onUp);
       el.removeEventListener("pointercancel", onUp);
     };
-  }, [active]);
+  }, []);
 
   const press = (key: "throttle" | "brake" | "drift" | "boost" | "oil" | "missile" | "shield" | "emp", val: number | boolean) => {
     if (key === "drift" || key === "boost" || key === "oil" || key === "missile" || key === "shield" || key === "emp") runtime.touch[key] = Boolean(val);
@@ -793,15 +796,15 @@ function TouchControls() {
   return (
     <div className="pointer-events-auto absolute bottom-0 left-0 right-0 flex flex-col items-end gap-2 px-3 pb-[max(1rem,env(safe-area-inset-bottom))] md:hidden">
       <div className="flex gap-2">
-        <button onPointerDown={() => press("oil", true)} onPointerUp={() => press("oil", false)} className="h-12 w-12 rounded-full border border-line bg-panel/80 text-[10px] uppercase leading-tight text-mute">Oil<span className="block text-[9px] text-ivory">{hud.oil ?? 0}</span></button>
-        <button onPointerDown={() => press("missile", true)} onPointerUp={() => press("missile", false)} className="h-12 w-12 rounded-full border border-ember bg-ember/30 text-[10px] uppercase leading-tight text-ember">Msl<span className="block text-[9px]">{hud.missile ?? 0}</span></button>
-        <button onPointerDown={() => press("shield", true)} onPointerUp={() => press("shield", false)} className="h-12 w-12 rounded-full border border-gold bg-gold/20 text-[10px] uppercase leading-tight text-gold">Shld<span className="block text-[9px]">{hud.shieldAmmo ?? 0}</span></button>
-        <button onPointerDown={() => press("emp", true)} onPointerUp={() => press("emp", false)} className="h-12 w-12 rounded-full border border-line bg-panel/80 text-[10px] uppercase leading-tight text-mute">EMP<span className="block text-[9px] text-ivory">{hud.emp ?? 0}</span></button>
+        <button onPointerDown={() => press("oil", true)} onPointerUp={() => press("oil", false)} onPointerLeave={() => press("oil", false)} onPointerCancel={() => press("oil", false)} className="h-12 w-12 rounded-full border border-line bg-panel/80 text-[10px] uppercase leading-tight text-mute">Oil<span className="block text-[9px] text-ivory">{hud.oil ?? 0}</span></button>
+        <button onPointerDown={() => press("missile", true)} onPointerUp={() => press("missile", false)} onPointerLeave={() => press("missile", false)} onPointerCancel={() => press("missile", false)} className="h-12 w-12 rounded-full border border-ember bg-ember/30 text-[10px] uppercase leading-tight text-ember">Msl<span className="block text-[9px]">{hud.missile ?? 0}</span></button>
+        <button onPointerDown={() => press("shield", true)} onPointerUp={() => press("shield", false)} onPointerLeave={() => press("shield", false)} onPointerCancel={() => press("shield", false)} className="h-12 w-12 rounded-full border border-gold bg-gold/20 text-[10px] uppercase leading-tight text-gold">Shld<span className="block text-[9px]">{hud.shieldAmmo ?? 0}</span></button>
+        <button onPointerDown={() => press("emp", true)} onPointerUp={() => press("emp", false)} onPointerLeave={() => press("emp", false)} onPointerCancel={() => press("emp", false)} className="h-12 w-12 rounded-full border border-line bg-panel/80 text-[10px] uppercase leading-tight text-mute">EMP<span className="block text-[9px] text-ivory">{hud.emp ?? 0}</span></button>
       </div>
       <div className="flex items-end justify-between w-full">
       <div
         ref={steerRef}
-        className="h-24 w-32 rounded-2xl border border-line bg-panel/60 backdrop-blur touch-none"
+        className={`h-24 w-32 rounded-2xl border bg-panel/60 backdrop-blur touch-none ${active ? "border-gold" : "border-line"}`}
       >
         <div className="flex h-full items-center justify-center text-xs uppercase tracking-widest text-mute">
           Steer

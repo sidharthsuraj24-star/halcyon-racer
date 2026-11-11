@@ -56,6 +56,7 @@ type Sim = {
   slow: number;
   heat: number;
   chaseDist: number;
+  chaseSpd: number;
   escapeT: number;
   busted: boolean;
   drift: number;
@@ -103,7 +104,7 @@ function makeSim(): Sim {
   return {
     x: 0, y: 0, z: 0, yaw: 0, speed: 0, lat: 0, u: 0.02, prevU: 0.02, hint: 0,
     lap: 0, nextCp: 0, lastU: 0.02, lapTime: 0, raceTime: 0, bestLap: 0, lastLap: 0,
-    newRecord: false, finished: false, reported: false, finishHold: 0, boostT: 0, boostCharge: 1, boostActive: false, shield: 0, slow: 0, heat: 0, chaseDist: 18, escapeT: 0, busted: false,
+    newRecord: false, finished: false, reported: false, finishHold: 0, boostT: 0, boostCharge: 1, boostActive: false, shield: 0, slow: 0, heat: 0, chaseDist: 18, chaseSpd: 0, escapeT: 0, busted: false,
     drift: 0, drifting: false, damage: 0, tireWear: 0, tireTemp: 0.5, grip: 1, hitCd: 0, padCd: 0, shake: 0, wrong: 0,
     off: false, armed: false, place: 1, lapFlash: 0, banner: "", bannerT: 0, recAcc: 0,
     latOff: 0, rpm: 800, gear: 1, pitch: 0, roll: 0, susp: 0, shiftCd: 0, miniT: 0,
@@ -133,6 +134,7 @@ export const runtime = {
   recording: [] as GhostSample[],
   ghost: [] as GhostSample[],
   ghosts: {} as Record<string, GhostSample[]>,
+  replayTape: [] as GhostSample[],
   loadout: {} as Record<string, number>,
   weaponHeld: { oil: false, missile: false, shield: false, emp: false },
   replayT: 0,
@@ -281,6 +283,7 @@ export function reset(trackId: string, bestLap: number) {
   runtime.sim.boostT = 0;
   runtime.sim.heat = 0;
   runtime.sim.chaseDist = 18;
+  runtime.sim.chaseSpd = 0;
   runtime.sim.escapeT = 0;
   runtime.sim.busted = false;
 }
@@ -387,7 +390,7 @@ export function step(dt: number, ctx: StepCtx) {
   const shiftCut = sim.shiftCd > 0.3 ? 0.78 : 1;
   const engineForce = throttle * car.accel * accelBonus * torqueCurve * (sim.boostActive ? 1.6 : 1) * shiftCut;
   const brakeForce = brake * car.brake * (sim.speed > 0 ? 1 : 0.4);
-  const drag = (0.12 + (sim.off ? 1.8 : 0) + (ctx.weather === "rain" ? 0.22 : 0)) * sim.speed;
+  const drag = (0.12 + (sim.off ? 0.7 : 0) + (ctx.weather === "rain" ? 0.22 : 0)) * sim.speed;
   const aeroDrag = sim.speed * Math.abs(sim.speed) * 0.004;
   sim.speed += ((engineForce - brakeForce - drag - aeroDrag) / mass) * dt * 420;
   sim.speed = clamp(sim.speed, -maxCap * 0.28, maxCap * (sim.boostActive ? mult : 1));
@@ -409,13 +412,14 @@ export function step(dt: number, ctx: StepCtx) {
   const cold = sim.tireTemp < 0.35 ? 0.82 : 1;
   const hot = sim.tireTemp > 0.85 ? 0.88 : 1;
   const surface = (sim.off ? 0.55 : 1) * rain * gripBonus * (1 - sim.tireWear * 0.25) * cold * hot;
-  const gripF = car.grip * frontGrip * surface * Math.max(0.25, pacejka) * gripScale;
   const gripR = car.grip * rearGrip * surface * (drifting ? 0.35 : Math.max(0.3, pacejka)) * gripScale;
 
-  const speedFactor = clamp(Math.abs(sim.speed) / 12, 0.3, 1) * (1 - clamp((Math.abs(sim.speed) - 48) / 50, 0, 0.35));
+  const speedFactor = clamp(Math.abs(sim.speed) / 10, 0.4, 1) * (1 - clamp((Math.abs(sim.speed) - 58) / 90, 0, 0.15));
   const reverse = sim.speed >= 0 ? 1 : -1;
-  const yawRate = steer * car.turn * speedFactor * reverse * (gripF / Math.max(1, car.grip));
+  const steerAuth = clamp((0.72 + sim.grip * 0.28) * frontGrip, 0.5, 1.1) * (sim.off ? 0.85 : 1) * (ctx.weather === "rain" ? 0.9 : 1);
+  const yawRate = steer * car.turn * speedFactor * reverse * steerAuth * (Math.abs(sim.speed) < 24 ? 1.45 : 1);
   sim.yaw += yawRate * dt;
+  sim.yaw = Math.atan2(Math.sin(sim.yaw), Math.cos(sim.yaw));
 
   sim.lat *= Math.exp(-gripR * 0.45 * dt);
   sim.lat += steer * sim.speed * (drifting ? 0.48 : 0.055) * (1 - Math.min(0.5, slip)) * dt;
@@ -633,6 +637,9 @@ export function step(dt: number, ctx: StepCtx) {
   const edge = track.halfWidth;
   const wallAt = edge + track.shoulderW - 1.05;
   sim.off = absL > edge * 0.92;
+  if (Math.abs(steer) > 0.7 && sim.speed > 24 && absL > edge * 0.62) {
+    sim.speed = Math.max(16, sim.speed - 16 * dt);
+  }
   let justFinished = false;
   if (!sim.finished) {
     const chasing = sim.heat > 2.2;
@@ -644,6 +651,10 @@ export function step(dt: number, ctx: StepCtx) {
       sim.heat = Math.max(0, sim.heat - dt * 0.8);
     }
     if (chasing) {
+      const target = Math.max(18, Math.abs(sim.speed) * 0.92 + (sim.off ? 7 : 1.5));
+      sim.chaseSpd += (target - sim.chaseSpd) * Math.min(1, dt * 1.8);
+      const closing = (sim.chaseSpd - sim.speed) * 0.28 + (sim.off ? 2.4 : 0);
+      sim.chaseDist = clamp(sim.chaseDist - closing * dt, 2.4, 22);
       if (sim.chaseDist < 4.2) {
         sim.escapeT = Math.min(2, sim.escapeT <= 0 ? 2 : sim.escapeT) - dt;
         sim.banner = `ESCAPE ${Math.max(0, sim.escapeT).toFixed(1)}`;
@@ -667,6 +678,8 @@ export function step(dt: number, ctx: StepCtx) {
       }
     } else {
       sim.escapeT = 0;
+      sim.chaseDist = Math.min(20, sim.chaseDist + dt * 6);
+      sim.chaseSpd = 0;
     }
   }
   if (absL > wallAt) {
@@ -691,7 +704,7 @@ export function step(dt: number, ctx: StepCtx) {
           sim.banner = "BLOCK";
           sim.bannerT = 0.7;
         } else {
-          sim.damage = Math.min(1, sim.damage + 0.08);
+          sim.damage = Math.min(1, sim.damage + 0.08 * (1 - Math.min(0.6, armor)));
           sim.shake = Math.min(1, 0.3 + outward * 0.02);
           audio.bump();
         }
@@ -780,24 +793,38 @@ export function step(dt: number, ctx: StepCtx) {
     const turnAmt = clamp(1 - dot, 0, 1);
     let target = track.cruise * ai.skill * diff * (1 - turnAmt * 0.55);
     if (turnAmt > 0.35) target *= 0.82;
+    const nS = track.samples.length;
+    const i0 = ((Math.floor(ai.u * nS) % nS) + nS) % nS;
+    let curv = 0;
+    for (let k = 0; k < 14; k++) {
+      const sA = track.samples[(i0 + k) % nS];
+      const sB = track.samples[(i0 + k + 1) % nS];
+      const seg = Math.max(0.4, Math.hypot(sB.x - sA.x, sB.z - sA.z));
+      let ddh = sB.heading - sA.heading;
+      if (ddh > Math.PI) ddh -= Math.PI * 2;
+      if (ddh < -Math.PI) ddh += Math.PI * 2;
+      curv = Math.max(curv, Math.abs(ddh) / seg);
+    }
+    if (curv > 0.004) target = Math.min(target, Math.sqrt(22 / curv));
     if (aiBoost && ai.u > 0.3 && ai.u < 0.4 && ai.speed < target * 1.4) target *= 1.35;
     if (ctx.weather === "rain") target *= 0.9;
-    // Rubber-band + engage from the bike game: keep the field together, always winnable.
+    // Keep the pack reachable: ease off when ahead, chase a little when behind.
     const gap = youT - (ai.lap + ai.u);
-    if (gap > 0.06) target *= 1 - Math.min(0.18, (gap - 0.06) * 2);
-    else if (gap < -0.05) target *= 1 + Math.min(0.12, (-gap - 0.05) * 1.5);
-    // Engage: AI gets slightly more aggressive when close and player is not pulling away hard.
-    if (Math.abs(gap) < 0.03 && ai.speed > 12) target *= 1.04;
-    target = Math.min(target, track.cruise * 0.97);
+    if (gap > 0.08) target *= 1 + Math.min(0.1, (gap - 0.08) * 0.8);
+    else if (gap < -0.04) target *= 1 - Math.min(0.3, (-gap - 0.04) * 1.3);
+    if (Math.abs(gap) < 0.03 && ai.speed > 12) target *= 1.03;
+    target = Math.min(target, track.cruise * 0.98);
     const dx = sim.x - ai.x;
     const dz = sim.z - ai.z;
     const dist2 = dx * dx + dz * dz;
     if (dist2 < 36 && gap > -0.02 && gap < 0.02) {
       const ahead = dx * (-Math.sin(ai.yaw)) + dz * (-Math.cos(ai.yaw));
-      if (ahead > 0) target *= 1.06;
-      else target *= 0.94;
+      if (ahead > 0) target *= 1.05;
+      else target *= 0.95;
     }
-    ai.speed += (target - ai.speed) * Math.min(1, dt * 1.6);
+    const rise = Math.min(8.5 * dt, Math.max(0, target - ai.speed));
+    const fall = Math.min(18 * dt, Math.max(0, ai.speed - target));
+    ai.speed += rise - fall;
     ai.totalU += (ai.speed / track.length) * dt;
     ai.lap = Math.floor(ai.totalU);
     ai.u = ai.totalU - ai.lap;

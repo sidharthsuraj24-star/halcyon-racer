@@ -550,6 +550,44 @@ function build(def: Def): Track {
       heading: Math.atan2(tx, tz),
     });
   }
+  // Round single-sample kinks so a car can actually steer through them.
+  for (let pass = 0; pass < 16; pass++) {
+    const xs = samples.map((s) => s.x);
+    const zs = samples.map((s) => s.z);
+    for (let i = 0; i < N; i++) {
+      const p = samples[(i - 1 + N) % N];
+      const c = samples[i];
+      const q = samples[(i + 1) % N];
+      const h1 = Math.atan2(c.x - p.x, c.z - p.z);
+      const h2 = Math.atan2(q.x - c.x, q.z - c.z);
+      let dh = h2 - h1;
+      if (dh > Math.PI) dh -= Math.PI * 2;
+      if (dh < -Math.PI) dh += Math.PI * 2;
+      if (Math.abs(dh) > 0.14) {
+        xs[i] = c.x * 0.34 + (p.x + q.x) * 0.33;
+        zs[i] = c.z * 0.34 + (p.z + q.z) * 0.33;
+      }
+    }
+    for (let i = 0; i < N; i++) {
+      samples[i].x = xs[i];
+      samples[i].z = zs[i];
+    }
+  }
+  for (let i = 0; i < N; i++) {
+    const p = samples[(i - 1 + N) % N];
+    const q = samples[(i + 1) % N];
+    let tx = q.x - p.x;
+    let tz = q.z - p.z;
+    const h = Math.hypot(tx, tz) || 1;
+    tx /= h;
+    tz /= h;
+    const s = samples[i];
+    s.tx = tx;
+    s.tz = tz;
+    s.rx = -tz;
+    s.rz = tx;
+    s.heading = Math.atan2(tx, tz);
+  }
   let length = 0;
   for (let i = 0; i < N; i++) {
     const a = samples[i];
