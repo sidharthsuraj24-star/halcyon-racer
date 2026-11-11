@@ -155,7 +155,7 @@ function TutorialHint() {
     return () => window.removeEventListener("resize", check);
   }, []);
   return (
-    <div className="pointer-events-none absolute bottom-28 left-1/2 z-20 -translate-x-1/2 rounded-lg border border-line bg-panel/90 px-4 py-2 text-center text-xs text-mute backdrop-blur md:bottom-6">
+    <div className="pointer-events-none absolute left-1/2 top-44 z-20 max-w-xs -translate-x-1/2 rounded-lg border border-line bg-panel/90 px-4 py-2 text-center text-xs text-mute backdrop-blur md:top-auto md:bottom-6">
       {narrow ? "Steer pad · Acc · Drift · Nitro" : "WASD drive · Space drift · N nitro · C camera"}
     </div>
   );
@@ -226,18 +226,12 @@ function Menu(props: {
           </div>
         </div>
 
-        <div className="mt-4 flex items-center gap-4 text-sm">
+        <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
           <span className="text-mute">Credits</span>
           <span className="font-display text-2xl text-gold">{save.credits.toLocaleString()}</span>
-          <span className="text-mute">·</span>
-          <span className="text-mute">{save.races} races · {save.wins} wins · Series {save.series ?? 1} ({save.seriesWins ?? 0}/6)</span>
+          <span className="text-mute">{save.races} races · {save.wins} wins</span>
+          <span className="text-mute">Series {save.series ?? 1} · {save.seriesWins ?? 0}/6</span>
         </div>
-        <button
-          onClick={() => { audio.unlock(); audio.click(); startRace(); }}
-          className="mt-4 rounded-full bg-gold py-3 font-display text-lg uppercase tracking-widest text-ink transition hover:bg-gold-soft"
-        >
-          Start Race
-        </button>
       </div>
 
       {/* Right: car + actions */}
@@ -247,19 +241,19 @@ function Menu(props: {
           <div className="flex gap-2">
             <button
               onClick={() => setPanel(panel === "shop" ? "none" : "shop")}
-              className="rounded-full border border-line px-3 py-1 text-xs uppercase tracking-wider text-mute hover:text-ivory"
+              className={`rounded-full border px-3 py-1 text-xs uppercase tracking-wider ${panel === "shop" ? "border-gold text-gold" : "border-line text-mute hover:text-ivory"}`}
             >
               Shop
             </button>
             <button
               onClick={() => setPanel(panel === "board" ? "none" : "board")}
-              className="rounded-full border border-line px-3 py-1 text-xs uppercase tracking-wider text-mute hover:text-ivory"
+              className={`rounded-full border px-3 py-1 text-xs uppercase tracking-wider ${panel === "board" ? "border-gold text-gold" : "border-line text-mute hover:text-ivory"}`}
             >
               Board
             </button>
             <button
               onClick={() => setPanel(panel === "settings" ? "none" : "settings")}
-              className="rounded-full border border-line px-3 py-1 text-xs uppercase tracking-wider text-mute hover:text-ivory"
+              className={`rounded-full border px-3 py-1 text-xs uppercase tracking-wider ${panel === "settings" ? "border-gold text-gold" : "border-line text-mute hover:text-ivory"}`}
             >
               Settings
             </button>
@@ -475,6 +469,21 @@ function Board({ save, tracks }: { save: ReturnType<typeof useGame.getState>["sa
   );
 }
 
+function Meter({ label, value, text, color }: { label: string; value: number; text: string; color: string }) {
+  const pct = Math.max(0, Math.min(100, value * 100));
+  return (
+    <div className="mt-1">
+      <div className="flex justify-between text-[10px] uppercase tracking-wider text-mute">
+        <span>{label}</span>
+        <span>{text}</span>
+      </div>
+      <div className="mt-0.5 h-1 overflow-hidden rounded-full bg-line">
+        <div className="h-full" style={{ width: `${pct}%`, background: color }} />
+      </div>
+    </div>
+  );
+}
+
 function Hud(props: {
   hud: ReturnType<typeof useGame.getState>["hud"];
   phase: "race" | "paused";
@@ -488,17 +497,39 @@ function Hud(props: {
   const camLabel = camera === "chase" ? "TPP" : camera === "fpp" ? "FPP" : camera === "hood" ? "HOOD" : "TOWER";
   return (
     <>
-      {/* Top bar */}
       <div className="pointer-events-none flex items-start justify-between p-4 md:p-6">
         <div>
-          <div className="font-display text-3xl leading-none text-ivory md:text-5xl">
+          <div className={`font-display text-4xl leading-none md:text-5xl ${hud.place === 1 ? "text-gold" : "text-ivory"}`}>
             {ordinal(hud.place)}
             <span className="ml-1 text-base text-mute">/ {hud.total}</span>
           </div>
           <div className="mt-1 text-xs uppercase tracking-widest text-mute">{trackName}</div>
+          <div className="mt-2 space-y-0.5 text-sm">
+            <div className="flex gap-3">
+              <span className="w-10 text-mute">LAP</span>
+              <span>{hud.lap}/{hud.laps}</span>
+            </div>
+            <div className="flex gap-3">
+              <span className="w-10 text-mute">TIME</span>
+              <span className="font-mono">{formatTime(hud.lapTime)}</span>
+            </div>
+            <div className="flex gap-3">
+              <span className="w-10 text-mute">BEST</span>
+              <span className="font-mono text-gold">{formatTime(hud.bestLap)}</span>
+            </div>
+            {hud.ghostDelta !== undefined && Math.abs(hud.ghostDelta) > 0.05 && (
+              <div className="flex gap-3">
+                <span className="w-10 text-mute">Δ</span>
+                <span className={`font-mono ${hud.ghostDelta < 0 ? "text-gold" : "text-ember"}`}>
+                  {hud.ghostDelta < 0 ? "-" : "+"}{Math.abs(hud.ghostDelta).toFixed(2)}
+                </span>
+              </div>
+            )}
+            {hud.wrong && <div className="text-xs uppercase tracking-widest text-ember">Wrong way</div>}
+          </div>
         </div>
         <div className="text-right">
-          <div className="font-display text-3xl leading-none md:text-5xl">{hud.speed}</div>
+          <div className="font-display text-4xl leading-none md:text-5xl">{hud.speed}</div>
           <div className="text-xs uppercase tracking-widest text-mute">km/h · G{hud.gear}</div>
           <button
             onClick={cycleCamera}
@@ -509,72 +540,23 @@ function Hud(props: {
         </div>
       </div>
 
-      {/* Center banner */}
       {hud.banner && (
-        <div className="pointer-events-none absolute left-1/2 top-1/3 -translate-x-1/2 font-display text-6xl tracking-widest text-gold md:text-8xl">
+        <div className="pointer-events-none absolute left-1/2 top-[38%] -translate-x-1/2 font-display text-4xl tracking-widest text-gold drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] md:text-7xl">
           {hud.banner}
         </div>
       )}
 
-      {/* Bottom left times */}
-      <div className="pointer-events-none absolute bottom-6 left-4 space-y-1 text-sm md:left-6">
-        <div className="flex gap-4">
-          <span className="text-mute">LAP</span>
-          <span>{hud.lap}/{hud.laps}</span>
-        </div>
-        <div className="flex gap-4">
-          <span className="text-mute">TIME</span>
-          <span className="font-mono">{formatTime(hud.lapTime)}</span>
-        </div>
-        <div className="flex gap-4">
-          <span className="text-mute">BEST</span>
-          <span className="font-mono text-gold">{formatTime(hud.bestLap)}</span>
-        </div>
-        {hud.ghostDelta !== undefined && Math.abs(hud.ghostDelta) > 0.05 && (
-          <div className="flex gap-4">
-            <span className="text-mute">DELTA</span>
-            <span className={`font-mono ${hud.ghostDelta < 0 ? "text-gold" : "text-ember"}`}>
-              {hud.ghostDelta < 0 ? "-" : "+"}{Math.abs(hud.ghostDelta).toFixed(2)}
-            </span>
-          </div>
-        )}
-        {hud.wrong && <div className="text-ember">WRONG WAY</div>}
-      </div>
-
-      {/* Minimap */}
-      <div className="pointer-events-none absolute bottom-20 right-4 md:bottom-24 md:right-6">
+      <div className="pointer-events-none absolute bottom-[15.5rem] right-3 flex flex-col items-end gap-2 md:bottom-6 md:right-6">
         <Minimap />
-      </div>
-      <div className="pointer-events-none absolute bottom-6 right-4 w-40 md:right-6">
-        <div className="mb-1 flex justify-between text-[10px] uppercase tracking-wider text-mute">
-          <span>Nitro</span>
-          <span>{hud.boost >= 0.99 && !runtime.sim.boostActive ? "READY" : Math.round(hud.boost * 100)}</span>
-        </div>
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line">
-          <div className="h-full bg-ember" style={{ width: `${hud.boost * 100}%` }} />
-        </div>
-        <div className="mt-1 flex justify-between text-[10px] uppercase tracking-wider text-mute">
-          <span>Grip</span>
-          <span>{Math.round((runtime.sim.grip ?? 1) * 100)}</span>
-        </div>
-        <div className="h-1 overflow-hidden rounded-full bg-line">
-          <div className="h-full transition-all" style={{ width: `${(runtime.sim.grip ?? 1) * 100}%`, background: (runtime.sim.grip ?? 1) > 0.7 ? '#d4a45a' : (runtime.sim.grip ?? 1) > 0.45 ? '#e07a3d' : '#c45c3a' }} />
-        </div>
-        <div className="mt-1 flex justify-between text-[10px] uppercase tracking-wider text-mute">
-          <span>Tires</span>
-          <span>{Math.round((runtime.sim.tireTemp ?? 0.5) * 100)}</span>
-        </div>
-        <div className="h-1 overflow-hidden rounded-full bg-line">
-          <div className="h-full" style={{ width: `${(runtime.sim.tireTemp ?? 0.5) * 100}%`, background: (runtime.sim.tireTemp ?? 0.5) > 0.75 ? '#c45c3a' : (runtime.sim.tireTemp ?? 0.5) > 0.4 ? '#d4a45a' : '#6a8a9a' }} />
-        </div>
-        {hud.drift > 0.2 && (
-          <div className="mt-2 text-right text-xs uppercase tracking-widest text-gold">Drift</div>
-        )}
-        {runtime.sim.shield > 0 && (
-          <div className="mt-1 text-right text-[10px] uppercase tracking-widest text-ivory">Shield</div>
-        )}
-        <div className="mt-2 hidden text-right text-[10px] uppercase tracking-wider text-mute md:block">
-          Q {hud.oil ?? 0} · E {hud.missile ?? 0} · F {hud.shieldAmmo ?? 0} · G {hud.emp ?? 0}
+        <div className="w-36 rounded-xl border border-line/70 bg-ink/55 px-2 py-1.5 backdrop-blur">
+          <Meter label="Nitro" value={hud.boost} text={hud.boost >= 0.99 && !runtime.sim.boostActive ? "READY" : String(Math.round(hud.boost * 100))} color="#e07a3d" />
+          <Meter label="Grip" value={runtime.sim.grip ?? 1} text={String(Math.round((runtime.sim.grip ?? 1) * 100))} color={(runtime.sim.grip ?? 1) > 0.7 ? "#d4a45a" : (runtime.sim.grip ?? 1) > 0.45 ? "#e07a3d" : "#c45c3a"} />
+          <Meter label="Tires" value={runtime.sim.tireTemp ?? 0.5} text={String(Math.round((runtime.sim.tireTemp ?? 0.5) * 100))} color={(runtime.sim.tireTemp ?? 0.5) > 0.75 ? "#c45c3a" : (runtime.sim.tireTemp ?? 0.5) > 0.4 ? "#d4a45a" : "#6a8a9a"} />
+          <div className="mt-1 text-right text-[10px] uppercase tracking-wider text-mute">
+            Q {hud.oil ?? 0} · E {hud.missile ?? 0} · F {hud.shieldAmmo ?? 0} · G {hud.emp ?? 0}
+          </div>
+          {hud.drift > 0.2 && <div className="text-right text-[10px] uppercase tracking-widest text-gold">Drift</div>}
+          {runtime.sim.shield > 0 && <div className="text-right text-[10px] uppercase tracking-widest text-ivory">Shield</div>}
         </div>
       </div>
 
@@ -611,7 +593,7 @@ function Results(props: {
   const { results, trackName, startRace, retire, replay } = props;
   return (
     <div className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-ink/75 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl border border-line bg-panel p-8 text-center">
+      <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-line bg-panel p-6 text-center md:p-8">
         <div className="text-[11px] uppercase tracking-[0.4em] text-mute">{trackName}</div>
         <div className="mt-2 font-display text-6xl text-gold">
           {results.busted ? "BUSTED" : ordinal(results.place)}
