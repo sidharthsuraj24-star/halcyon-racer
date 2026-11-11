@@ -879,8 +879,8 @@ export function step(dt: number, ctx: StepCtx) {
     // Keep the pack reachable: ease off when ahead, chase a little when behind.
     const gap = youT - (ai.lap + ai.u);
     if (gap > 0.08) target *= 1 + Math.min(0.1, (gap - 0.08) * 0.8);
-    else if (gap < -0.04) target *= 1 - Math.min(0.3, (-gap - 0.04) * 1.3);
-    if (Math.abs(gap) < 0.03 && ai.speed > 12) target *= 1.03;
+    else if (gap < -0.015) target *= 1 - Math.min(0.18, (-gap - 0.015) * 2.2);
+    if (gap >= 0 && gap < 0.03 && ai.speed > 12) target *= 1.03;
     target = Math.min(target, track.cruise * 0.98);
     const dx = sim.x - ai.x;
     const dz = sim.z - ai.z;
