@@ -485,6 +485,7 @@ function Hud(props: {
   cycleCamera: () => void;
 }) {
   const { hud, phase, trackName, camera, resume, retire, cycleCamera } = props;
+  const items = useGame((s) => s.save.items);
   const camLabel = camera === "chase" ? "TPP" : camera === "fpp" ? "FPP" : camera === "hood" ? "HOOD" : "TOWER";
   return (
     <>
@@ -570,6 +571,9 @@ function Hud(props: {
         {hud.drift > 0.2 && (
           <div className="mt-2 text-right text-xs uppercase tracking-widest text-gold">Drift</div>
         )}
+        <div className="mt-2 hidden text-right text-[10px] uppercase tracking-wider text-mute md:block">
+          Q {items.oil ?? 0} · E {items.missile ?? 0} · F {items.shield ?? 0} · G {items.emp ?? 0}
+        </div>
       </div>
 
       {/* Pause overlay */}
@@ -782,14 +786,15 @@ function TouchControls() {
     if (key === "drift" || key === "boost" || key === "oil" || key === "missile" || key === "shield" || key === "emp") runtime.touch[key] = Boolean(val);
     else runtime.touch[key] = Number(val);
   };
+  const items = useGame((s) => s.save.items);
 
   return (
     <div className="pointer-events-auto absolute bottom-0 left-0 right-0 flex flex-col items-end gap-2 px-3 pb-[max(1rem,env(safe-area-inset-bottom))] md:hidden">
       <div className="flex gap-2">
-        <button onPointerDown={() => press("oil", true)} onPointerUp={() => press("oil", false)} className="h-12 w-12 rounded-full border border-line bg-panel/80 text-[10px] uppercase text-mute">Oil</button>
-        <button onPointerDown={() => press("missile", true)} onPointerUp={() => press("missile", false)} className="h-12 w-12 rounded-full border border-ember bg-ember/30 text-[10px] uppercase text-ember">Msl</button>
-        <button onPointerDown={() => press("shield", true)} onPointerUp={() => press("shield", false)} className="h-12 w-12 rounded-full border border-gold bg-gold/20 text-[10px] uppercase text-gold">Shld</button>
-        <button onPointerDown={() => press("emp", true)} onPointerUp={() => press("emp", false)} className="h-12 w-12 rounded-full border border-line bg-panel/80 text-[10px] uppercase text-mute">EMP</button>
+        <button onPointerDown={() => press("oil", true)} onPointerUp={() => press("oil", false)} className="h-12 w-12 rounded-full border border-line bg-panel/80 text-[10px] uppercase leading-tight text-mute">Oil<span className="block text-[9px] text-ivory">{items.oil ?? 0}</span></button>
+        <button onPointerDown={() => press("missile", true)} onPointerUp={() => press("missile", false)} className="h-12 w-12 rounded-full border border-ember bg-ember/30 text-[10px] uppercase leading-tight text-ember">Msl<span className="block text-[9px]">{items.missile ?? 0}</span></button>
+        <button onPointerDown={() => press("shield", true)} onPointerUp={() => press("shield", false)} className="h-12 w-12 rounded-full border border-gold bg-gold/20 text-[10px] uppercase leading-tight text-gold">Shld<span className="block text-[9px]">{items.shield ?? 0}</span></button>
+        <button onPointerDown={() => press("emp", true)} onPointerUp={() => press("emp", false)} className="h-12 w-12 rounded-full border border-line bg-panel/80 text-[10px] uppercase leading-tight text-mute">EMP<span className="block text-[9px] text-ivory">{items.emp ?? 0}</span></button>
       </div>
       <div className="flex items-end justify-between w-full">
       <div

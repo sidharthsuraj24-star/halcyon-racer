@@ -165,8 +165,9 @@ function Loop() {
       const fz = -Math.cos(yaw);
       const slip = Math.abs(sim.lat) / Math.max(4, Math.abs(sim.speed));
       const kick = slip * 1.4;
+      const lookAhead = Math.min(7, Math.abs(sim.speed) * 0.09);
       desired.set(px - fx * (dist + kick), py + height, pz - fz * (dist + kick));
-      look.set(px + fx * 8, py + 1.05, pz + fz * 8);
+      look.set(px + fx * (8 + lookAhead), py + 1.05, pz + fz * (8 + lookAhead));
     }
 
     if (sim.shake > 0 && phase === "race") {

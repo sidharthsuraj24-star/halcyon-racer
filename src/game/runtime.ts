@@ -82,6 +82,7 @@ type Sim = {
   roll: number;
   susp: number;
   shiftCd: number;
+  miniT: number;
 };
 
 type Ai = {
@@ -105,7 +106,7 @@ function makeSim(): Sim {
     newRecord: false, finished: false, reported: false, finishHold: 0, boostT: 0, boostCharge: 1, boostActive: false, shield: 0, slow: 0, heat: 0, chaseDist: 18, escapeT: 0, busted: false,
     drift: 0, drifting: false, damage: 0, tireWear: 0, tireTemp: 0.5, grip: 1, hitCd: 0, padCd: 0, shake: 0, wrong: 0,
     off: false, armed: false, place: 1, lapFlash: 0, banner: "", bannerT: 0, recAcc: 0,
-    latOff: 0, rpm: 800, gear: 1, pitch: 0, roll: 0, susp: 0, shiftCd: 0,
+    latOff: 0, rpm: 800, gear: 1, pitch: 0, roll: 0, susp: 0, shiftCd: 0, miniT: 0,
   };
 }
 
@@ -262,6 +263,7 @@ export function reset(trackId: string, bestLap: number) {
   writePlayerPose(0, 0);
   poses[6].visible = false;
   runtime.recording = [];
+  hazards.length = 0;
   runtime.snapCam = true;
   runtime.replayT = 0;
   runtime.sim.boostCharge = 1;
@@ -363,6 +365,7 @@ export function step(dt: number, ctx: StepCtx) {
   if (sim.shiftCd <= 0 && sim.rpm > redline - 200 && gear < 6 && throttle > 0.4) {
     sim.gear = Math.min(6, gear + 1);
     sim.shiftCd = 0.45;
+    audio.click();
   }
   if (sim.shiftCd <= 0 && sim.rpm < 1800 && gear > 1 && throttle < 0.25) {
     sim.gear = Math.max(1, gear - 1);
@@ -371,7 +374,8 @@ export function step(dt: number, ctx: StepCtx) {
 
   const rpmN = clamp((sim.rpm - idle) / (redline - idle), 0, 1);
   const torqueCurve = Math.sin(rpmN * Math.PI) * 0.85 + 0.15;
-  const engineForce = throttle * car.accel * accelBonus * torqueCurve * (sim.boostActive ? 1.6 : 1);
+  const shiftCut = sim.shiftCd > 0.3 ? 0.78 : 1;
+  const engineForce = throttle * car.accel * accelBonus * torqueCurve * (sim.boostActive ? 1.6 : 1) * shiftCut;
   const brakeForce = brake * car.brake * (sim.speed > 0 ? 1 : 0.4);
   const drag = (0.12 + (sim.off ? 1.8 : 0) + (ctx.weather === "rain" ? 0.22 : 0)) * sim.speed;
   const aeroDrag = sim.speed * Math.abs(sim.speed) * 0.004;
@@ -422,8 +426,13 @@ export function step(dt: number, ctx: StepCtx) {
     sim.drifting = true;
   } else {
     if (sim.drifting && sim.drift > 0.28) {
-      sim.boostT = 0.4 + sim.drift * 1.2;
-      sim.shake = Math.max(sim.shake, 0.32);
+      sim.miniT = 0.45 + sim.drift * 0.9;
+      sim.shake = Math.max(sim.shake, 0.4);
+      if (sim.bannerT < 0.5) {
+        sim.banner = "BOOST";
+        sim.bannerT = 0.7;
+      }
+      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(18);
     }
     sim.drifting = false;
     sim.drift = Math.max(0, sim.drift - dt * (drift ? 0.15 : 1.5));
@@ -448,6 +457,11 @@ export function step(dt: number, ctx: StepCtx) {
       sim.boostActive = false;
       sim.boostT = 0;
     }
+  }
+  if (sim.miniT > 0) {
+    sim.miniT -= dt;
+    const cap = maxCap * (sim.boostActive ? mult : 1.12);
+    if (sim.speed < cap) sim.speed += 55 * dt;
   }
   if (sim.slow > 0) {
     sim.slow -= dt;
@@ -502,6 +516,36 @@ export function step(dt: number, ctx: StepCtx) {
   for (let i = hazards.length - 1; i >= 0; i--) {
     const h = hazards[i];
     h.life -= dt;
+    if (h.type === "missile") {
+      let best: (typeof runtime.ai)[number] | null = null;
+      let bestD = 36 * 36;
+      for (const ai of runtime.ai) {
+        const dx = ai.x - h.x;
+        const dz = ai.z - h.z;
+        const d2 = dx * dx + dz * dz;
+        const ahead = dx * h.vx + dz * h.vz;
+        if (d2 < bestD && ahead > -8) {
+          bestD = d2;
+          best = ai;
+        }
+      }
+      if (best) {
+        const dx = best.x - h.x;
+        const dz = best.z - h.z;
+        const len = Math.hypot(dx, dz) || 1;
+        const spd = 46;
+        h.vx += ((dx / len) * spd - h.vx) * Math.min(1, dt * 4);
+        h.vz += ((dz / len) * spd - h.vz) * Math.min(1, dt * 4);
+        if (bestD < 10) {
+          best.speed *= 0.32;
+          h.life = 0;
+          sim.banner = "HIT";
+          sim.bannerT = 0.8;
+          sim.shake = Math.max(sim.shake, 0.4);
+          if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(20);
+        }
+      }
+    }
     h.x += h.vx * dt;
     h.z += h.vz * dt;
     if (h.type === "oil") {
@@ -512,13 +556,20 @@ export function step(dt: number, ctx: StepCtx) {
         sim.lat += (Math.random() - 0.5) * 8;
         h.life = 0;
       }
-    } else {
-      const dx = sim.x - h.x;
-      const dz = sim.z - h.z;
-      if (dx * dx + dz * dz < 5) {
-        if (sim.shield > 0) sim.shield = 0;
-        else { sim.speed *= 0.4; sim.shake = 0.6; }
-        h.life = 0;
+      if (h.life > 0) {
+        for (const ai of runtime.ai) {
+          const adx = ai.x - h.x;
+          const adz = ai.z - h.z;
+          if (adx * adx + adz * adz < 14) {
+            ai.speed *= 0.5;
+            h.life = 0;
+            if (sim.bannerT < 0.4) {
+              sim.banner = "SLIDE";
+              sim.bannerT = 0.6;
+            }
+            break;
+          }
+        }
       }
     }
     if (h.life <= 0) hazards.splice(i, 1);
