@@ -774,7 +774,9 @@ export function step(dt: number, ctx: StepCtx) {
       sim.lapTime += dt;
       sim.raceTime += dt;
     } else {
-    if (dlt < 0.25) {
+    // Any forward step short of a lap-wrap can collect the gates it actually crossed.
+    // The old 0.25 cutoff dropped a legal pass and left nextCp behind the car.
+    if (dlt > 0 && dlt < 0.5) {
       let guard = 0;
       while (guard++ < 4 && crossed(sim.prevU, u, CP[sim.nextCp])) {
         sim.lastU = CP[sim.nextCp];
