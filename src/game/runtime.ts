@@ -229,8 +229,8 @@ export function reset(trackId: string, bestLap: number) {
   runtime.trackId = trackId;
   const sim = runtime.sim;
   Object.assign(sim, makeSim());
-  sim.bestLap = bestLap;
-  const spacing = 9 / track.length;
+  sim.bestLap = Number.isFinite(bestLap) && bestLap > 0 ? bestLap : 0;
+  const spacing = 9 / Math.max(1, track.length);
   const pole = 0.016;
   const playerU = pole + spacing * 1.3;
   const s = sampleAt(track, playerU, tmpA);
@@ -286,6 +286,17 @@ export function reset(trackId: string, bestLap: number) {
   runtime.sim.chaseSpd = 0;
   runtime.sim.escapeT = 0;
   runtime.sim.busted = false;
+  runtime.qaKeys = null;
+  runtime.steerOverride = null;
+  runtime.touch.steer = 0;
+  runtime.touch.throttle = 0;
+  runtime.touch.brake = 0;
+  runtime.touch.drift = false;
+  runtime.touch.boost = false;
+  runtime.touch.oil = false;
+  runtime.touch.missile = false;
+  runtime.touch.shield = false;
+  runtime.touch.emp = false;
 }
 
 export function respawn(force = false) {
@@ -307,6 +318,10 @@ export function respawn(force = false) {
   sim.lat = 0;
   sim.hitCd = 0.7;
   sim.wrong = 0;
+  if (!Number.isFinite(sim.rpm)) sim.rpm = 800;
+  if (!Number.isFinite(sim.gear)) sim.gear = 1;
+  if (!Number.isFinite(sim.grip)) sim.grip = 1;
+  if (!Number.isFinite(sim.damage)) sim.damage = 0;
   sim.hint = Math.floor(u * track.samples.length) % track.samples.length;
   runtime.snapCam = true;
 }
@@ -331,14 +346,28 @@ export type StepCtx = {
 };
 
 export function step(dt: number, ctx: StepCtx) {
+  if (!Number.isFinite(dt) || dt <= 0) return;
+  dt = Math.min(dt, 1 / 30);
   const track = getTrack(runtime.trackId);
   const sim = runtime.sim;
-  if (![sim.x, sim.y, sim.z, sim.speed, sim.yaw, sim.lat, sim.u].every(Number.isFinite)) {
+  if (!Number.isFinite(sim.rpm)) sim.rpm = 800;
+  if (!Number.isFinite(sim.gear)) sim.gear = 1;
+  if (!Number.isFinite(sim.grip)) sim.grip = 1;
+  if (!Number.isFinite(sim.damage)) sim.damage = 0;
+  if (!Number.isFinite(sim.tireTemp)) sim.tireTemp = 0.5;
+  if (!Number.isFinite(sim.tireWear)) sim.tireWear = 0;
+  if (!Number.isFinite(sim.boostCharge)) sim.boostCharge = 1;
+  if (!Number.isFinite(sim.lat)) sim.lat = 0;
+  if (![sim.x, sim.y, sim.z, sim.speed, sim.yaw, sim.u].every(Number.isFinite)) {
     respawn(true);
   }
   const car = ctx.car;
   if (!car || !Number.isFinite(car.maxSpeed) || !Number.isFinite(car.accel)) return;
   const items = ctx.items ?? {};
+  const count = (id: string, max = 3) => {
+    const n = items[id];
+    return Number.isFinite(n) ? Math.max(0, Math.min(max, n)) : 0;
+  };
   let { steer, throttle, brake, drift, boostKey, oilKey, missileKey, shieldKey, empKey } = actions();
   if (sim.finished) {
     throttle = 0;
@@ -352,17 +381,17 @@ export function step(dt: number, ctx: StepCtx) {
     empKey = false;
   }
 
-  const gripBonus = 1 + (items.grip ?? 0) * 0.08;
-  const accelBonus = 1 + (items.turbo ?? 0) * 0.1;
-  const armor = (items.armor ?? 0) * 0.2;
-  const rechargeBonus = 1 + (items.nitro ?? 0) * 0.15;
-  const speedBonus = 1 + (items.aero ?? 0) * 0.06;
+  const gripBonus = 1 + count("grip") * 0.08;
+  const accelBonus = 1 + count("turbo") * 0.1;
+  const armor = count("armor") * 0.2;
+  const rechargeBonus = 1 + count("nitro") * 0.15;
+  const speedBonus = 1 + count("aero") * 0.06;
   const rain = ctx.weather === "rain" ? 0.78 : 1;
   const mass = 1400;
   const maxCap = car.maxSpeed * speedBonus * (1 - sim.damage * 0.18 * (1 - armor));
   const drifting = Boolean(drift) && sim.speed > 12 && Math.abs(steer) > 0.12;
-  const boostLvl = Math.max(1, Math.min(4, ctx.boostLevel || 1));
-  const mult = [1, 1.22, 1.3, 1.38, 1.48][boostLvl];
+  const boostLvl = Math.max(1, Math.min(4, Number.isFinite(ctx.boostLevel) ? ctx.boostLevel : 1));
+  const mult = [1, 1.22, 1.3, 1.38, 1.48][boostLvl] ?? 1;
 
   // Torque curve: peak mid-RPM, falls off at redline
   const gearRatios = [0, 3.4, 2.2, 1.55, 1.15, 0.88, 0.72];
@@ -490,8 +519,8 @@ export function step(dt: number, ctx: StepCtx) {
     return down && !was;
   };
   const useWeapon = (id: string) => {
-    const n = runtime.loadout[id] ?? 0;
-    if (n <= 0) return false;
+    const n = runtime.loadout[id];
+    if (!Number.isFinite(n) || n < 1) return false;
     runtime.loadout[id] = n - 1;
     return true;
   };
@@ -798,9 +827,15 @@ export function step(dt: number, ctx: StepCtx) {
   }
 
   const diff = ctx.difficulty === "casual" ? 0.84 : ctx.difficulty === "elite" ? 1.05 : 0.95;
-  const aiBoost = ctx.difficulty === "elite" || (items.nitro ?? 0) >= 2;
+  const aiBoost = ctx.difficulty === "elite" || count("nitro") >= 2;
   const youT = sim.lap + sim.u;
   for (const ai of runtime.ai) {
+    if (!Number.isFinite(ai.speed)) ai.speed = 0;
+    if (!Number.isFinite(ai.u) || !Number.isFinite(ai.totalU)) {
+      ai.u = 0;
+      ai.lap = 0;
+      ai.totalU = 0;
+    }
     const a = sampleAt(track, ai.u, tmpA);
     const b = sampleAt(track, ai.u + 0.014, tmpB);
     const dot = clamp(a.tx * b.tx + a.tz * b.tz, -1, 1);

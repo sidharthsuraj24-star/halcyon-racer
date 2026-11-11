@@ -50,13 +50,44 @@ const emptySave = (): SaveData => ({
   items: {},
 });
 
+function num(v: unknown, fallback: number, min: number, max: number) {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
+function cleanRecord(raw: unknown) {
+  const out: Record<string, number> = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const n = num(v, 0, 0, 86400);
+    if (n > 0) out[k] = n;
+  }
+  return out;
+}
+
 function loadSave(): SaveData {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return emptySave();
-    const parsed = JSON.parse(raw) as SaveData;
+    const parsed = JSON.parse(raw) as Partial<SaveData>;
     if (parsed.version !== 2 && parsed.version !== 1) return emptySave();
-    return { ...emptySave(), ...parsed, boostLevel: parsed.boostLevel ?? 1, items: parsed.items ?? {} };
+    const items: Record<string, number> = {};
+    if (parsed.items && typeof parsed.items === "object") {
+      for (const [k, v] of Object.entries(parsed.items)) items[k] = num(v, 0, 0, 5);
+    }
+    return {
+      ...emptySave(),
+      credits: num(parsed.credits, 0, 0, 1e7),
+      races: Math.floor(num(parsed.races, 0, 0, 1e6)),
+      wins: Math.floor(num(parsed.wins, 0, 0, 1e6)),
+      series: Math.floor(num(parsed.series, 1, 1, 999)),
+      seriesWins: Math.floor(num(parsed.seriesWins, 0, 0, 100)),
+      bestLap: cleanRecord(parsed.bestLap),
+      bestRace: cleanRecord(parsed.bestRace),
+      boostLevel: Math.floor(num(parsed.boostLevel, 1, 1, 4)),
+      items,
+    };
   } catch {
     return emptySave();
   }
@@ -244,7 +275,7 @@ export const useGame = create<State>((set, get) => ({
     if (!item) return false;
     const owned = st.save.items[id] ?? 0;
     if (owned >= item.max) return false;
-    if (st.save.credits < item.cost) return false;
+    if (!Number.isFinite(st.save.credits) || st.save.credits < item.cost) return false;
     const save: SaveData = {
       ...st.save,
       credits: st.save.credits - item.cost,
@@ -260,7 +291,7 @@ export const useGame = create<State>((set, get) => ({
     const req = BOOST_WINS[next];
     if (req == null || st.save.wins < req) return false;
     const cost = BOOST_COST[next] ?? 0;
-    if (st.save.credits < cost) return false;
+    if (st.save.credits < cost || !Number.isFinite(st.save.credits)) return false;
     const save: SaveData = { ...st.save, boostLevel: next, credits: st.save.credits - cost };
     writeSave(save);
     set({ save });
@@ -274,7 +305,12 @@ export const useGame = create<State>((set, get) => ({
     runtime.sim.banner = "3";
     runtime.sim.bannerT = 1;
     runtime.phase = "race";
-    runtime.loadout = { ...st.save.items };
+    const loadout: Record<string, number> = {};
+    for (const [k, v] of Object.entries(st.save.items ?? {})) {
+      const n = typeof v === "number" ? v : Number(v);
+      if (Number.isFinite(n) && n >= 1) loadout[k] = Math.min(5, Math.floor(n));
+    }
+    runtime.loadout = loadout;
     runtime.weaponHeld = { oil: false, missile: false, shield: false, emp: false };
     runtime.ghost = st.ghost ? (runtime.ghosts[st.trackId] ?? []) : [];
     audio.start();
