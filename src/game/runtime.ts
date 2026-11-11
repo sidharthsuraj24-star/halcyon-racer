@@ -132,6 +132,9 @@ export const runtime = {
   snapCam: true,
   recording: [] as GhostSample[],
   ghost: [] as GhostSample[],
+  ghosts: {} as Record<string, GhostSample[]>,
+  loadout: {} as Record<string, number>,
+  weaponHeld: { oil: false, missile: false, shield: false, emp: false },
   replayT: 0,
   replayIx: 0,
   finishPose: { x: 0, y: 0, z: 0, yaw: 0 },
@@ -373,7 +376,7 @@ export function step(dt: number, ctx: StepCtx) {
   }
 
   const rpmN = clamp((sim.rpm - idle) / (redline - idle), 0, 1);
-  const torqueCurve = Math.sin(rpmN * Math.PI) * 0.85 + 0.15;
+  const torqueCurve = 0.62 + Math.sin(rpmN * Math.PI) * 0.38;
   const shiftCut = sim.shiftCd > 0.3 ? 0.78 : 1;
   const engineForce = throttle * car.accel * accelBonus * torqueCurve * (sim.boostActive ? 1.6 : 1) * shiftCut;
   const brakeForce = brake * car.brake * (sim.speed > 0 ? 1 : 0.4);
@@ -469,32 +472,37 @@ export function step(dt: number, ctx: StepCtx) {
   }
   if (sim.shield > 0) sim.shield -= dt;
 
+  const pressed = (id: "oil" | "missile" | "shield" | "emp", down: boolean) => {
+    const was = runtime.weaponHeld[id];
+    runtime.weaponHeld[id] = down;
+    return down && !was;
+  };
   const useWeapon = (id: string) => {
-    const n = ctx.items[id] ?? 0;
+    const n = runtime.loadout[id] ?? 0;
     if (n <= 0) return false;
-    ctx.items[id] = n - 1;
+    runtime.loadout[id] = n - 1;
     return true;
   };
-  if (oilKey && useWeapon("oil")) {
+  if (pressed("oil", oilKey) && useWeapon("oil")) {
     const fx = -Math.sin(sim.yaw);
     const fz = -Math.cos(sim.yaw);
-    hazards.push({ type: "oil", x: sim.x - fx * 3, z: sim.z - fz * 3, life: 8, vx: 0, vz: 0 });
+    hazards.push({ type: "oil", x: sim.x - fx * 6, z: sim.z - fz * 6, life: 8, vx: 0, vz: 0 });
     sim.banner = "OIL";
     sim.bannerT = 0.6;
   }
-  if (missileKey && useWeapon("missile")) {
+  if (pressed("missile", missileKey) && useWeapon("missile")) {
     const fx = -Math.sin(sim.yaw);
     const fz = -Math.cos(sim.yaw);
     hazards.push({ type: "missile", x: sim.x + fx * 2, z: sim.z + fz * 2, life: 3, vx: fx * 40, vz: fz * 40 });
     sim.banner = "MISSILE";
     sim.bannerT = 0.6;
   }
-  if (shieldKey && useWeapon("shield") && sim.shield <= 0) {
+  if (pressed("shield", shieldKey) && sim.shield <= 0 && useWeapon("shield")) {
     sim.shield = 6;
     sim.banner = "SHIELD";
     sim.bannerT = 0.8;
   }
-  if (empKey && useWeapon("emp")) {
+  if (pressed("emp", empKey) && useWeapon("emp")) {
     for (const ai of runtime.ai) {
       const dx = ai.x - sim.x;
       const dz = ai.z - sim.z;
@@ -865,6 +873,10 @@ export function hudSnapshot() {
     newRecord: s.newRecord,
     shake: s.shake,
     ghostDelta,
+    oil: runtime.loadout.oil ?? 0,
+    missile: runtime.loadout.missile ?? 0,
+    shieldAmmo: runtime.loadout.shield ?? 0,
+    emp: runtime.loadout.emp ?? 0,
   };
 }
 

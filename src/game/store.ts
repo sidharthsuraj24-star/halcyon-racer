@@ -188,6 +188,7 @@ export const useGame = create<State>((set, get) => ({
     const metaTime = id === "gulch" || id === "spine" || id === "laguna" ? "dusk" : id === "meridian" || id === "alto" || id === "nurburg" || id === "spa" || id === "suzuka" ? "day" : "night";
     set({ trackId: id, time: metaTime });
     reset(id, save.bestLap[id] ?? 0);
+    runtime.ghost = runtime.ghosts[id] ?? [];
     persist(get());
   },
   setCar: (id) => {
@@ -273,8 +274,10 @@ export const useGame = create<State>((set, get) => ({
     runtime.sim.banner = "3";
     runtime.sim.bannerT = 1;
     runtime.phase = "race";
+    runtime.loadout = { ...st.save.items };
+    runtime.weaponHeld = { oil: false, missile: false, shield: false, emp: false };
+    runtime.ghost = st.ghost ? (runtime.ghosts[st.trackId] ?? []) : [];
     audio.start();
-    runtime.ghost = st.ghost ? runtime.ghost : [];
     set({ phase: "race", panel: "none", results: null });
     get().pushHud();
   },
@@ -288,9 +291,14 @@ export const useGame = create<State>((set, get) => ({
   },
   retire: () => {
     const st = get();
+    const items = { ...st.save.items };
+    for (const id of ["oil", "missile", "shield", "emp"]) items[id] = runtime.loadout[id] ?? items[id] ?? 0;
+    const save: SaveData = { ...st.save, items };
+    writeSave(save);
     runtime.phase = "menu";
-    reset(st.trackId, st.save.bestLap[st.trackId] ?? 0);
-    set({ phase: "menu", panel: "none" });
+    reset(st.trackId, save.bestLap[st.trackId] ?? 0);
+    runtime.ghost = runtime.ghosts[st.trackId] ?? [];
+    set({ phase: "menu", panel: "none", save });
   },
   completeRace: () => {
     const st = get();
@@ -301,8 +309,11 @@ export const useGame = create<State>((set, get) => ({
     const nextSeriesWins = sim.busted ? (st.save.seriesWins ?? 0) : (st.save.seriesWins ?? 0) + (place <= 3 ? 1 : 0);
     const seriesUp = nextSeriesWins >= 6;
     const credits = sim.busted ? 0 : Math.round((table[place] ?? 28) * mult) + (seriesUp ? 250 : 0);
+    const items = { ...st.save.items };
+    for (const id of ["oil", "missile", "shield", "emp"]) items[id] = runtime.loadout[id] ?? items[id] ?? 0;
     const save: SaveData = {
       ...st.save,
+      items,
       credits: st.save.credits + credits,
       races: st.save.races + 1,
       wins: st.save.wins + (place === 1 && !sim.busted ? 1 : 0),
@@ -319,7 +330,11 @@ export const useGame = create<State>((set, get) => ({
       save.bestRace[st.trackId] = raceTime;
     }
     writeSave(save);
-    runtime.ghost = runtime.recording.slice();
+    const prevBest = st.save.bestRace[st.trackId];
+    if (!sim.busted && raceTime > 15 && (prevBest == null || raceTime <= prevBest)) {
+      runtime.ghosts[st.trackId] = runtime.recording.slice();
+    }
+    runtime.ghost = runtime.ghosts[st.trackId] ?? [];
     runtime.finishPose = { x: sim.x, y: sim.y, z: sim.z, yaw: sim.yaw };
     runtime.phase = "results";
     audio.finish();
