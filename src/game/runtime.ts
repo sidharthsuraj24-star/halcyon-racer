@@ -288,10 +288,13 @@ export function reset(trackId: string, bestLap: number) {
   runtime.sim.busted = false;
 }
 
-export function respawn() {
-  const track = getTrack(runtime.trackId);
+export function respawn(force = false) {
   const sim = runtime.sim;
-  const u = (sim.lastU + 0.004) % 1;
+  if (sim.finished && !force) return;
+  const track = getTrack(runtime.trackId);
+  let base = Number.isFinite(sim.lastU) ? sim.lastU : sim.u;
+  if (!Number.isFinite(base)) base = 0.02;
+  const u = (((base + 0.004) % 1) + 1) % 1;
   const s = sampleAt(track, u, tmpA);
   sim.x = s.x;
   sim.y = s.y;
@@ -299,11 +302,12 @@ export function respawn() {
   sim.yaw = Math.atan2(-s.tx, -s.tz);
   sim.u = u;
   sim.prevU = u;
-  sim.speed = clamp(Math.max(sim.speed * 0.45, 16), 0, 32);
+  const carry = Number.isFinite(sim.speed) ? sim.speed : 16;
+  sim.speed = clamp(Math.max(carry * 0.45, 16), 0, 32);
   sim.lat = 0;
   sim.hitCd = 0.7;
   sim.wrong = 0;
-  sim.hint = Math.floor(u * track.samples.length);
+  sim.hint = Math.floor(u * track.samples.length) % track.samples.length;
   runtime.snapCam = true;
 }
 
@@ -329,15 +333,12 @@ export type StepCtx = {
 export function step(dt: number, ctx: StepCtx) {
   const track = getTrack(runtime.trackId);
   const sim = runtime.sim;
-  if (!Number.isFinite(sim.x) || !Number.isFinite(sim.z) || !Number.isFinite(sim.speed)) {
-    sim.x = 0;
-    sim.z = 0;
-    sim.y = 0;
-    sim.speed = 0;
-    sim.lat = 0;
-    sim.yaw = 0;
+  if (![sim.x, sim.y, sim.z, sim.speed, sim.yaw, sim.lat, sim.u].every(Number.isFinite)) {
+    respawn(true);
   }
   const car = ctx.car;
+  if (!car || !Number.isFinite(car.maxSpeed) || !Number.isFinite(car.accel)) return;
+  const items = ctx.items ?? {};
   let { steer, throttle, brake, drift, boostKey, oilKey, missileKey, shieldKey, empKey } = actions();
   if (sim.finished) {
     throttle = 0;
@@ -351,11 +352,11 @@ export function step(dt: number, ctx: StepCtx) {
     empKey = false;
   }
 
-  const gripBonus = 1 + (ctx.items.grip ?? 0) * 0.08;
-  const accelBonus = 1 + (ctx.items.turbo ?? 0) * 0.1;
-  const armor = (ctx.items.armor ?? 0) * 0.2;
-  const rechargeBonus = 1 + (ctx.items.nitro ?? 0) * 0.15;
-  const speedBonus = 1 + (ctx.items.aero ?? 0) * 0.06;
+  const gripBonus = 1 + (items.grip ?? 0) * 0.08;
+  const accelBonus = 1 + (items.turbo ?? 0) * 0.1;
+  const armor = (items.armor ?? 0) * 0.2;
+  const rechargeBonus = 1 + (items.nitro ?? 0) * 0.15;
+  const speedBonus = 1 + (items.aero ?? 0) * 0.06;
   const rain = ctx.weather === "rain" ? 0.78 : 1;
   const mass = 1400;
   const maxCap = car.maxSpeed * speedBonus * (1 - sim.damage * 0.18 * (1 - armor));
@@ -629,7 +630,7 @@ export function step(dt: number, ctx: StepCtx) {
     }
   }
   sim.hint = useHint;
-  const s = track.samples[sim.hint];
+  const s = track.samples[sim.hint] ?? track.samples[0];
   if (!s) return;
   const latOff = (sim.x - s.x) * s.rx + (sim.z - s.z) * s.rz;
   sim.latOff = latOff;
@@ -651,11 +652,15 @@ export function step(dt: number, ctx: StepCtx) {
       sim.heat = Math.max(0, sim.heat - dt * 0.8);
     }
     if (chasing) {
-      const target = Math.max(18, Math.abs(sim.speed) * 0.92 + (sim.off ? 7 : 1.5));
-      sim.chaseSpd += (target - sim.chaseSpd) * Math.min(1, dt * 1.8);
-      const closing = (sim.chaseSpd - sim.speed) * 0.28 + (sim.off ? 2.4 : 0);
-      sim.chaseDist = clamp(sim.chaseDist - closing * dt, 2.4, 22);
-      if (sim.chaseDist < 4.2) {
+      if (sim.off) {
+        const target = Math.max(18, Math.abs(sim.speed) * 0.9 + 6);
+        sim.chaseSpd += (target - sim.chaseSpd) * Math.min(1, dt * 1.8);
+        sim.chaseDist = clamp(sim.chaseDist - (2.4 + Math.max(0, sim.chaseSpd - sim.speed) * 0.12) * dt, 2.4, 22);
+      } else {
+        sim.chaseDist = clamp(sim.chaseDist + 8 * dt, 2.4, 22);
+        sim.escapeT = 0;
+      }
+      if (sim.off && sim.chaseDist < 4.2) {
         sim.escapeT = Math.min(2, sim.escapeT <= 0 ? 2 : sim.escapeT) - dt;
         sim.banner = `ESCAPE ${Math.max(0, sim.escapeT).toFixed(1)}`;
         sim.bannerT = 0.4;
@@ -667,11 +672,11 @@ export function step(dt: number, ctx: StepCtx) {
           sim.bannerT = 2;
         }
       } else {
-        sim.escapeT = 0;
+        if (!sim.off) sim.escapeT = 0;
         if (sim.chaseDist > 14) {
           sim.heat = Math.max(0, sim.heat - dt * 1.2);
-          if (sim.heat < 2.2) sim.banner = "CLEAR";
-        } else if (sim.bannerT < 0.2) {
+          if (sim.heat < 2.2 && sim.bannerT < 0.3) sim.banner = "CLEAR";
+        } else if (sim.off && sim.bannerT < 0.2) {
           sim.banner = "POLICE";
           sim.bannerT = 0.8;
         }
@@ -729,9 +734,17 @@ export function step(dt: number, ctx: StepCtx) {
     let dlt = u - sim.prevU;
     if (dlt > 0.5) dlt -= 1;
     if (dlt < -0.5) dlt += 1;
-    if (dlt < -0.002) sim.wrong = Math.min(2, sim.wrong + dt);
+    const along = (-Math.sin(sim.yaw) * s.tx - Math.cos(sim.yaw) * s.tz) * sim.speed;
+    if (along < -8 || dlt < -0.00002) sim.wrong = Math.min(2.5, sim.wrong + dt);
     else sim.wrong = Math.max(0, sim.wrong - dt * 2);
-
+    if (sim.wrong >= 2.5) {
+      respawn();
+      sim.banner = "RESET";
+      sim.bannerT = 1.1;
+      sim.prevU = sim.u;
+      sim.lapTime += dt;
+      sim.raceTime += dt;
+    } else {
     if (dlt < 0.25) {
       let guard = 0;
       while (guard++ < 4 && crossed(sim.prevU, u, CP[sim.nextCp])) {
@@ -778,13 +791,14 @@ export function step(dt: number, ctx: StepCtx) {
         }
       }
     }
+    }
   } else {
     sim.finishHold += dt;
     sim.raceTime += 0;
   }
 
   const diff = ctx.difficulty === "casual" ? 0.84 : ctx.difficulty === "elite" ? 1.05 : 0.95;
-  const aiBoost = ctx.difficulty === "elite" || (ctx.items.nitro ?? 0) >= 2;
+  const aiBoost = ctx.difficulty === "elite" || (items.nitro ?? 0) >= 2;
   const youT = sim.lap + sim.u;
   for (const ai of runtime.ai) {
     const a = sampleAt(track, ai.u, tmpA);
@@ -825,7 +839,7 @@ export function step(dt: number, ctx: StepCtx) {
     const rise = Math.min(8.5 * dt, Math.max(0, target - ai.speed));
     const fall = Math.min(18 * dt, Math.max(0, ai.speed - target));
     ai.speed += rise - fall;
-    ai.totalU += (ai.speed / track.length) * dt;
+    ai.totalU += (ai.speed / Math.max(1, track.length)) * dt;
     ai.lap = Math.floor(ai.totalU);
     ai.u = ai.totalU - ai.lap;
     let lat = Math.sin(ai.totalU * Math.PI * 6 + ai.phase) * (track.halfWidth * 0.38);
@@ -856,6 +870,7 @@ export function step(dt: number, ctx: StepCtx) {
     if (sim.recAcc >= 0.1) {
       sim.recAcc = 0;
       runtime.recording.push({ t: sim.raceTime, x: sim.x, y: sim.y, z: sim.z, yaw: sim.yaw });
+      if (runtime.recording.length > 4000) runtime.recording.splice(0, runtime.recording.length - 4000);
     }
   }
 

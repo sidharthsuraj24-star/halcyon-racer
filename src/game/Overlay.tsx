@@ -780,6 +780,15 @@ function TouchControls() {
     el.addEventListener("pointerup", onUp);
     el.addEventListener("pointercancel", onUp);
     return () => {
+      runtime.touch.steer = 0;
+      runtime.touch.throttle = 0;
+      runtime.touch.brake = 0;
+      runtime.touch.drift = false;
+      runtime.touch.boost = false;
+      runtime.touch.oil = false;
+      runtime.touch.missile = false;
+      runtime.touch.shield = false;
+      runtime.touch.emp = false;
       el.removeEventListener("pointerdown", onDown);
       el.removeEventListener("pointermove", onMove);
       el.removeEventListener("pointerup", onUp);
