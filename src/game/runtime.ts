@@ -653,8 +653,8 @@ export function step(dt: number, ctx: StepCtx) {
     if (d2 < min * min && d2 > 1e-5) {
       const d = Math.sqrt(d2);
       const push = min - d;
-      sim.x += (dx / d) * push;
-      sim.z += (dz / d) * push;
+      sim.x -= (dx / d) * push;
+      sim.z -= (dz / d) * push;
       sim.speed *= 0.99;
     }
   }
