@@ -585,7 +585,22 @@ export function step(dt: number, ctx: StepCtx) {
         const spd = 46;
         h.vx += ((dx / len) * spd - h.vx) * Math.min(1, dt * 4);
         h.vz += ((dz / len) * spd - h.vz) * Math.min(1, dt * 4);
-        if (bestD < 10) {
+      }
+      const ox = h.x;
+      const oz = h.z;
+      h.x += h.vx * dt;
+      h.z += h.vz * dt;
+      if (best) {
+        const mx = h.x - ox;
+        const mz = h.z - oz;
+        const seg = mx * mx + mz * mz;
+        const tx = best.x - ox;
+        const tz = best.z - oz;
+        const t = seg > 1e-6 ? Math.max(0, Math.min(1, (tx * mx + tz * mz) / seg)) : 0;
+        const cx = ox + mx * t;
+        const cz = oz + mz * t;
+        const hit = (best.x - cx) * (best.x - cx) + (best.z - cz) * (best.z - cz);
+        if (hit < 16) {
           best.speed *= 0.32;
           h.life = 0;
           sim.banner = "HIT";
@@ -594,9 +609,10 @@ export function step(dt: number, ctx: StepCtx) {
           if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(20);
         }
       }
+    } else {
+      h.x += h.vx * dt;
+      h.z += h.vz * dt;
     }
-    h.x += h.vx * dt;
-    h.z += h.vz * dt;
     if (h.type === "oil") {
       const dx = sim.x - h.x;
       const dz = sim.z - h.z;
@@ -774,6 +790,7 @@ export function step(dt: number, ctx: StepCtx) {
       sim.lapTime += dt;
       sim.raceTime += dt;
     } else {
+    const fromU = sim.prevU;
     // Any forward step short of a lap-wrap can collect the gates it actually crossed.
     // The old 0.25 cutoff dropped a legal pass and left nextCp behind the car.
     if (dlt > 0 && dlt < 0.5) {
@@ -809,9 +826,9 @@ export function step(dt: number, ctx: StepCtx) {
     sim.lapTime += dt;
     sim.raceTime += dt;
 
-    if (sim.padCd <= 0 && absL < edge) {
+    if (sim.padCd <= 0 && absL < edge && dlt > 0 && dlt < 0.5) {
       for (const gate of PAD_U) {
-        if (crossed(sim.prevU, u, gate) || crossed((u - dlt + 1) % 1, u, gate)) {
+        if (crossed(fromU, u, gate)) {
           sim.speed = Math.min(maxCap * 1.06, Math.max(0, sim.speed) + 11);
           sim.padCd = 1;
           if (sim.bannerT < 0.4) {
